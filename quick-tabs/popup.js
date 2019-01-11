@@ -810,7 +810,9 @@ FuseSearch.prototype.searchTabArray = function(query, tabs) {
     shouldSort: true,
 	includeMatches: true,
 	maxPatternLength: 32,
-	minMatchCharLength: 1,
+	//minMatchCharLength: 1,
+	//minMatchCharLength: (query.length / (2 * (query.split(" ").length))), // too primitive 
+	minMatchCharLength: findShortestWord(query).length / 2, // more intelligent and just the right min match size
 	keys: [{
 	  name: 'title',
       weight: 1.0 
@@ -849,6 +851,15 @@ FuseSearch.prototype.searchTabArray = function(query, tabs) {
       favIconUrl: result.item.favIconUrl
     }
   }.bind(this));
+};
+
+// helper function 
+ function findShortestWord(str) {
+  var words = str.split(' ');
+  var shortest = words.reduce((shortestWord, currentWord) => {
+    return currentWord.length < shortestWord.length ? currentWord : shortestWord;
+  }, words[0]);
+  return shortest;
 };
 
 /**
