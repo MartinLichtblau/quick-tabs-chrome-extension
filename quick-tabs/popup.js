@@ -60,6 +60,10 @@ var MAX_NON_TAB_RESULTS = 50;
  */
 var MIN_TAB_ONLY_RESULTS = bg.autoSearchBookmarks() ? 5 : 0;
 
+/**
+ * a flag to detect when modifier keys of the extension shortcut are pressed down
+ */
+var modifierDown = false; // or modifierState ?
 
 /**
  * Simple little timer class to help with optimizations
@@ -93,6 +97,25 @@ function log() {
     bg.log.apply(bg, args);
   }
 }
+
+	document.addEventListener('keyup', function (event) {
+	console.log(event);
+    if (event.defaultPrevented) {
+        return;
+    }
+    var key = event.code;
+		if (key === 'AltLeft' || key === 'ShiftLeft') {
+				var attr = entryWithFocus().attr('id');
+				if (attr) {
+					var tabId = parseInt(attr);
+					bg.switchTabsWithoutDelay(tabId);
+				}
+    } else if (key === 'Digit8') {
+			focusNext();
+		} else if (key === 'Digit9') {
+			focusPrev();
+		}
+});
 
 function openInNewTab(url) {
   log("opening new tab", url);
@@ -241,7 +264,7 @@ function compareTabArrays(recordedTabsList, queryTabList) {
  */
 
 $(document).ready(function() {
-
+	
   // pageTimer.log("Document ready");
 
   switch(bg.searchType()) {
@@ -379,7 +402,7 @@ $(document).ready(function() {
   if (bg.restoreLastSearchedStr() && typeof lastSearch !== "undefined" && lastSearch.length > 0) {
     $("#searchbox").val(lastSearch).select();
     var result = search.executeSearch(lastSearch);
-    renderTabsExceptCurrent(result, 100);
+    renderTabsExceptCurrent(result, 10);
   } else {
     drawCurrentTabs();
   }
@@ -395,7 +418,7 @@ function drawCurrentTabs() {
   chrome.tabs.query({}, function(queryResultTabs) {
 
     // assign the cleaned tabs list back to background.js
-    bg.tabs = compareTabArrays(bg.tabs, queryResultTabs);
+    //bg.tabs = compareTabArrays(bg.tabs, queryResultTabs);
 
     /**
      * render only the tabs and closed tabs on initial load (hence the empty array [] for bookmarks), the
@@ -404,7 +427,7 @@ function drawCurrentTabs() {
     renderTabsExceptCurrent({
       allTabs: bg.tabs,
       closedTabs: bg.closedTabs
-    }, 100);
+    }, 10);
   });
 }
 
@@ -530,11 +553,14 @@ function renderTabs(params, delay, currentTab) {
  */
 bgMessagePort.onMessage.addListener(function(msg) {
   //log("popup message!", msg);
-  if (msg.move === "next") {
-		focusPrev();
-  } else if (msg.move === "prev") {
-    focusNext();
-  }
+	if (msg.move) {
+		modifierDown = true;
+		if (msg.move === "next") {
+			focusPrev();
+		} else if (msg.move === "prev") {
+			focusNext();
+		}
+	}
 });
 
 /**

@@ -611,44 +611,41 @@ function init() {
       });
     }
   });
+	
+function openPopupAsWindow() {
+	chrome.windows.getCurrent(function(win) {
+        var currentWidth = 0;
+        var currentHeight = 0;
+        var width = 370;
+        var height = 900;
+    // You can modify some width/height here
+       currentWidth = win.left / 2;
+       currentHeight = win.top / 2;
+
+        var left = Math.round((screen.width  / 2) - (width / 2) - currentWidth);
+        var top = Math.round((screen.height / 2) - (height / 2) - currentHeight);
+
+        chrome.windows.create(
+					{
+							'url': chrome.runtime.getURL("popup.html"),
+							'type': 'panel',
+							'width': width,
+							'height': height,
+							'left': left,
+							'top': top
+					}, function (window) {
+				 
+				});
+    });
+};
 
   chrome.commands.onCommand.addListener(function(command) {
     //log('Command:', command);
 
     if (popupMessagePort) { // shortcut triggered from inside popup
-      if (command === "quick-prev-tab") {
-        popupMessagePort.postMessage({move: "prev"});
-      } else if (command === "quick-next-tab") {
-        popupMessagePort.postMessage({move: "next"});
-      }
+     
     } else { // shortcut triggered anywhere else in Chrome or even Global	
-			if(tabs.length > 1) {
-				if (command === "quick-prev-tab") {
-					// Differ between: normal Chrome tab || Global OS-app, chrome windowsTypes: 'popup','devtools'
-					chrome.windows.getLastFocused({populate: false, windowTypes: ['normal']}, function (window) {
-						if(window.focused) {
-							// Chrome is currently focused, and more specifically a normal chrome tab
-							chrome.tabs.query({active: true, currentWindow: true}, function(t) {
-								var activeTab = t[0];
-								if (activeTab.id == tabs[activeTabsIndex].id) {									
-									switchTabs(tabs[activeTabsIndex + 1].id); // jump to previous = tabs[1]
-									activeTabsIndex++;
-								} else {
-									// since the use has some other tab active and not the latest, first jump back to it
-									switchTabs(tabs[activeTabsIndex].id); // jump to latest = tabs[0]
-								}
-							});
-						} else {
-							// In focus is a Global OS-app or chrome windowsTypes: 'popup','devtools'
-							switchTabs(tabs[activeTabsIndex].id); // jump to latest = tabs[0]
-						}
-					});
-				} else if (command === "quick-next-tab" && activeTabsIndex != 0) {
-					// next can only work if switched already to previous, and hence latest tab isn't selected / activeTabsIndex != 0 
-					switchTabs(tabs[activeTabsIndex - 1].id);
-					activeTabsIndex--;
-				}					
-			}
+			openPopupAsWindow();
 		}
   });
 
