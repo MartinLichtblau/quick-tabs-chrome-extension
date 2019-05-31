@@ -81,7 +81,7 @@ var bookmarks = [];
  * tabs[index] of tab that's currently active/focused 
  */
 var activeTabsIndex = 0;
-
+var isChromeFocused = null;
 
 /**
  * use a DelayedFunction so that it can be canceled if another tab is selected before the timer
@@ -312,8 +312,13 @@ function clearOldShortcutKey() {
   localStorage["key_popup"] = null
 }
 
+var popupUrl = chrome.runtime.getURL("popup.html");
+
 function includeTab(tab) {
-  return !(!showDevTools() && /chrome-devtools:\/\//.exec(tab.url));
+	var include = true;
+  include = !(!showDevTools() && /chrome-devtools:\/\//.exec(tab.url));
+	include = !(tab.url === popupUrl); //'chrome-extension://dbgcbefmdhnkndodnldmhjfnhnpkiddp/popup.html'); // instead use sth. like chrome.runtime.getURL("html/popup.html");
+	return include
 }
 
 function getKeyCombo(savedAs, def) {
@@ -416,11 +421,20 @@ function updateBadgeText(val) {
  * @param tabId
  */
 function updateTabOrder(tabId) {
+	var idx = indexOfTab(tabId);
+	
+	if (idx === -1) { // if tabId doesn't exist in tabs
+		return;
+	}
 	// Don't update when returning to same tab: e.g. when closing extension popups, developer tools, ...
 	if(tabId == tabs[0].id && !tabOrderUpdateFunction) { 
 		// log("New Tab is already current tab (1st in list): newTabId = ", tabId ," currentTabId = ", tabs[0].id);
-		return
+		return;
 	}
+	
+	// if(tab.url != 'chrome-extension://dbgcbefmdhnkndodnldmhjfnhnpkiddp/popup.html') { // instead use sth. like chrome.runtime.getURL("html/popup.html");
+		// return;
+	// }
 
   // change the badge color while the tab change timer is active
   chrome.browserAction.setBadgeBackgroundColor(tabTimerBadgeColor);
@@ -430,20 +444,25 @@ function updateTabOrder(tabId) {
     tabOrderUpdateFunction.cancel();
   }
 
-  var idx = indexOfTab(tabId);
-
   // setup a new timer
   tabOrderUpdateFunction = new DelayedFunction(function() { // @TODO instead of DelayedFunction use setTimeout(fx, time)
     if (idx >= 0) { // if tab exists in tabs[]
       //log('updating tab order for', tabId, 'index', idx);
-      var tab = tabs[idx];
-      tabs.splice(idx, 1); // removes tab from old position = idx
-      tabs.unshift(tab); // adds tab to new position = beginning
-			activeTabsIndex = 0; // snyc tabs[] pointer and acutal current tab 
+			
+			var tab = tabs[idx];
+			
+			// #note: the only way to detect whether chrome is currently focused
+			isChromeFocused(function(chromeIsFocused){
+				if (chromeIsFocused) {
+					tabs.splice(idx, 1); // removes tab from old position = idx
+					tabs.unshift(tab); // adds tab to new position = beginning
+					activeTabsIndex = 0; // snyc tabs[] pointer and acutal current tab 
+				}				
+			});
     }
-    // reset the badge color
-    chrome.browserAction.setBadgeBackgroundColor(badgeColor);
-		tabOrderUpdateFunction.cancel(); // #note big bug. Function was never canceled and hence tabOrderUpdateFunction always true
+		// reset the badge color
+		chrome.browserAction.setBadgeBackgroundColor(badgeColor);
+		tabOrderUpdateFunction.cancel(); // #note big bug. Function was never canceled and hence tabOrderUpdateFunction always true				
   }, tabId === skipTabOrderUpdateTimer ? 0 : 1500);
 
   // clear the skip var
@@ -493,7 +512,7 @@ function switchTabsWithoutDelay(tabid) {
 function switchTabs(tabid) {
 	// Make switching experience smoother by first focusing tab and then window
 	chrome.tabs.update(tabid, {active:true}, function(tab) {
-		if (moveOnSwitch()) {	
+		if (moveOnSwitch()) {
         chrome.tabs.move(tab.id, { index: -1 });	
 		}
 		chrome.windows.update(tab.windowId, {focused:true});
@@ -530,6 +549,60 @@ function setupBookmarks() {
   allBookmarks(function(result) {
     bookmarks = result;
   });
+}
+
+function openPopupAsWindow() {
+	console.log("openPopupAsWindow 1");
+	chrome.windows.getCurrent(function(win) {
+		console.log("openPopupAsWindow 2");
+		var currentWidth = 0;
+		var currentHeight = 0;
+		var width = 370;
+		var height = 900;
+		// You can modify some width/height here
+		currentWidth = win.left / 2;
+		currentHeight = win.top / 2;
+
+		var left = Math.round((screen.width  / 2) - (width / 2) - currentWidth);
+		var top = Math.round((screen.height / 2) - (height / 2) - currentHeight);
+
+		chrome.windows.create(
+			{
+				'url': chrome.extension.getURL("popup.html"),
+				'type': 'popup', // use popup instead of panel, so it's not included in browsing history and undo close tab function
+				'width': width,
+				'height': height,
+				'left': left,
+				'top': top,
+				'focused': true
+			}, function (window) {
+				console.log("popup window created: "+window.tabs[0].id);
+			}
+		);
+	});
+};
+
+var prevTabShortcut = null;
+var newerTabShorcut = null;
+var searchTabShorcut = null;
+function extractKeysFromCommands() {
+	chrome.commands.getAll(function(commands) {
+		commands.forEach(function(command) {
+			var keys = command.shortcut.split('+');
+			// bgMessagePort.postMessage("command keys: "+keys);
+			switch(command.name) {
+				case 'quick-search-tab':
+					searchTabShorcut = {modifierKey: keys[0], alphanumKey: keys[keys.length-1]}
+					break;
+				case 'quick-prev-tab':
+					olderTabShorcut = {modifierKey: keys[0], alphanumKey: keys[keys.length-1]}
+					break;
+				case 'quick-next-tab':
+					newerTabShorcut = {modifierKey: keys[0], alphanumKey: keys[keys.length-1]}
+					break;
+			}
+		});
+	});
 }
 
 function init() {
@@ -595,71 +668,91 @@ function init() {
 
   chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
 //    log('onUpdated tab', tab.id, tabId);
-    tabs[indexOfTab(tabId)] = tab;
+		// if (changeInfo.status === "complete") { 
+			// update tabs only once on complete, and not 4+ times before. 
+				// NEEDS to update on all, or makes probs on startup (since status is broken in Chrome)			
+					tabs[indexOfTab(tabId)] = tab;
+		// }
   });
 
   chrome.tabs.onActivated.addListener(function (info) {
-//    log('onActivated tab', info.tabId);
+		// console.log('onActivated tab', info.tabId);
     updateTabOrder(info.tabId);
   });
-
+ 
+	// var isChromeFocused = null;
+	// var latestActiveTabId;
   chrome.windows.onFocusChanged.addListener(function(windowId) {
+		// console.log("onFocusChanged");
+		// #note: because of a chrome bug it's not possible to detect when Chrome lost focus.
     if (windowId !== chrome.windows.WINDOW_ID_NONE) {
       chrome.tabs.query({windowId:windowId, active:true}, function (tabArray) {
-//        log('onFocusChanged tab', tabArray);
-        updateTabsOrder(tabArray);
+        updateTabsOrder(tabArray); // since there can be only one tab active at a time, could call updatetaborder() directly with tabArray[0]
       });
     }
   });
 	
-function openPopupAsWindow() {
-	chrome.windows.getCurrent(function(win) {
-        var currentWidth = 0;
-        var currentHeight = 0;
-        var width = 370;
-        var height = 900;
-    // You can modify some width/height here
-       currentWidth = win.left / 2;
-       currentHeight = win.top / 2;
-
-        var left = Math.round((screen.width  / 2) - (width / 2) - currentWidth);
-        var top = Math.round((screen.height / 2) - (height / 2) - currentHeight);
-
-        chrome.windows.create(
-					{
-							'url': chrome.runtime.getURL("popup.html"),
-							'type': 'panel',
-							'width': width,
-							'height': height,
-							'left': left,
-							'top': top
-					}, function (window) {
-				 
-				});
-    });
-};
-
+	var popupTriggerd = false; // popupMessagePort takes too much time to rely on as an indicator whether popup start was triggerd, the in between time
   chrome.commands.onCommand.addListener(function(command) {
-    //log('Command:', command);
-
-    if (popupMessagePort) { // shortcut triggered from inside popup
-     
-    } else { // shortcut triggered anywhere else in Chrome or even Global	
-			openPopupAsWindow();
+		if (popupTriggerd) {
+			// if (command === "quick-search-tab") {
+				// popupMessagePort.postMessage("closeWindow"); // search shortcut closes popup
+			// }		
+		} else {
+			openPopup(command);
 		}
   });
+	
+	function openPopup (command) {
+		console.log("openPopup() with command: "+command);
+		popupTriggerd = true;
+		openPopupAsWindow();
+		extractKeysFromCommands(); // fetch shorcuts anew before each startup in case they changed
+		chrome.windows.getCurrent({populate: true}, function(win) {
+			console.log("openPopup 2");
+			var winActiveTab = win.tabs.find(tab => tab.active);  // Perhaps the id of the tab isn't needed. only if chrome was FOCUSED or not
+			chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+				if (request.popupReady === true) {
+					sendResponse({'initCommand': command, 'initFromTab': (win.focused ? winActiveTab : null)});
+					console.log("openPopup 3");
+					chrome.runtime.onMessage.removeListener(arguments.callee); // Not needed since it's a simple one time request 
+					// return true; // to call sendResponse async
+				}
+			});
+		});
+	}
+	
+	isChromeFocused = function(callback){
+    chrome.windows.getCurrent(function(browser){
+      callback(browser.focused);
+    });
+	};	
+	
+	function showViews() {
+		var windows = chrome.extension.getViews({type: "popup"}); 
+		// browser.extension.getViews({type: "tab"});
+		// browser.extension.getViews({type: "popup"});
+		for (var extensionWindow of windows) {
+			console.log(extensionWindow.location.href);
+		}
+	};
 
   chrome.runtime.onConnect.addListener(function(port) {
     if (port.name === "qtPopup") {
-      //log("popup opened!");
+      console.log("popup opened!");
       popupMessagePort = port;
-      if(tabOrderUpdateFunction) {
+      if(tabOrderUpdateFunction) { // all the delay stuff isn't needed with dedicated GUI
         tabOrderUpdateFunction.call();
       }
       popupMessagePort.onDisconnect.addListener(function(msg) {
-        //log("popup closed!", msg);
+        console.log("popup closed!");
         popupMessagePort = null;
+				popupTriggerd = false;
+				chrome.history.deleteUrl({url: popupUrl}); // remove it manually from browsing history 
       });
+			popupMessagePort.onMessage.addListener(function(msg) {
+				console.log("PopupCL: "+msg); // show all popup console messages in background.js console
+			});
     }
   });
 
@@ -671,4 +764,4 @@ function openPopupAsWindow() {
   setupBookmarks();
 }
 
-init();
+init(); // doesn't work like this if background.js persistent = false.

@@ -6,7 +6,7 @@
   "browser_action": {
     "default_icon": "assets/icon-32.png",
     "default_title": "Quick Tabs",
-    "default_popup": "popup.html"
+    "default_popup": "Options.html"
   },
   "description": "A keyboard centric most recently used (MRU) ordered tab list plugin with search and switch functionality inspired by IntelliJ IDEA",
   "icons": {
@@ -18,23 +18,36 @@
   "manifest_version": 2,
   "name": "Quick Tabs",
   "options_page": "options.html",
-  "permissions": [ "tabs", "bookmarks", "history" ],
+  "permissions": [ 
+		"tabs", 
+		"bookmarks", 
+		"history", 
+		"http://*/",
+		"https://*/"
+	],
   "update_url": "http://clients2.google.com/service/update2/crx",
 
   "version": "2019.2.27",
 
   "commands": {
     "_execute_browser_action": {
-       "suggested_key": {
-         "default": "Ctrl+E",
-         "mac": "Command+E",
-         "linux": "Ctrl+Q"
-       }
+    },
+		"quick-search-tab": {
+			"suggested_key": {
+				"default": "Alt+A"
+			},
+      "description": "Open search"
     },
     "quick-prev-tab": {
+			"suggested_key": {
+				"default": "Alt+D"
+			},
       "description": "Switch to Older tab"
     },
     "quick-next-tab": {
+			"suggested_key": {
+				"default": "Alt+S"
+			},
       "description": "Switch to Newer tab"
     }
   }
