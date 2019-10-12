@@ -28,14 +28,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 <html>
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-  <link rel="stylesheet" href="assets/styles.css" type="text/css" media="all"/>
-  <link rel="stylesheet" href="assets/styles-popup.css" type="text/css" media="all"/>
+  <link rel="stylesheet" href="assets/styles.css" type="text/css"/>
+  <link rel="stylesheet" href="assets/styles-popup.css" type="text/css"/>
   <title>Quick Tabs</title>
 </head>
 <body>
 <div id="tools" class="tools"></div>
 <div class="qs_wrapper">
-  <input type="text" name="search" value="" class ="qs_input" id="searchbox" placeholder="Search, add spaces to include bookmarks or history" autocomplete="off" tabindex="1" autofocus/>
+  <input type="text" name="search" value="" class ="qs_input" id="searchbox" placeholder="Search, add spaces to include bookmarks or history" autocomplete="off" tabindex="1" spellcheck="false" autofocus/>
 </div>
 <div class="content" tabindex="2">
   <div id="content-list">
@@ -52,13 +52,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
   {{#tabs}}
     <div class="item tab open {{urlStyle}}" id="{{id}}">
-      <div class="{{tabImageStyle}}">
-        <img src="{{templateTabImage}}" width="16" height="16" border="0">
-      </div>
       <div>
         <div class="close" id="c{{id}}" title="{{closeTitle}}"></div>
         <div class="title"{{#tips}} title="{{{templateTooltip}}}"{{/tips}}>{{{templateTitle}}}</div>
         {{#urls}}<div class="url">{{{templateUrl}}}</div>{{/urls}}
+      </div>
+      <div class="{{tabImageStyle}}">
+        <img src="{{templateTabImage}}" width="16" height="16" border="0">
       </div>
     </div>
   {{/tabs}}
@@ -120,12 +120,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 </script>
 
-<script defer src="js/jquery-3.2.1.min.js"></script>
-<script defer src="js/jquery.hotkeys-0.8.js"></script>
-<script defer src="js/fuse.min.js"></script>
-<script defer src="js/fuzzy.js"></script>
-<script defer src="js/mustache.min.js"></script>
-<script defer src="popup.js"></script>
+<script src="js/jquery-3.2.1.min.js" type="text/javascript"></script>
+<script src="js/jquery.hotkeys-0.8.js" type="text/javascript"></script>
+<script defer src="js/fuse.min.js" type="text/javascript"></script>
+<script defer src="js/fuzzy.js" type="text/javascript"></script>
+<script defer src="js/mustache.min.js" type="text/javascript"></script>
+<script src="popup.js" type="text/javascript"></script>
 
 </body>
 </html>

@@ -30,7 +30,7 @@ body {
   height: 100%;
   overflow: hidden;
   overflow-y: auto;
-  line-height: 1.25;
+  line-height: 1.25;*+
 }
 
 .qs_input {
@@ -64,7 +64,7 @@ div.template {
 
 b {
   font-weight: bold;
-  text-decoration: underline;
+  // text-decoration: underline;
 }
 
 .withfocus b {

@@ -552,23 +552,23 @@ function setupBookmarks() {
 }
 
 function openPopupAsWindow() {
-	console.log("openPopupAsWindow 1");
 	chrome.windows.getCurrent(function(win) {
-		console.log("openPopupAsWindow 2");
-		var currentWidth = 0;
-		var currentHeight = 0;
-		var width = 370;
-		var height = 900;
+		// var currentWidth = 0;
+		// var currentHeight = 0;
+		var width = screen.width;
+		var height = screen.height - (screen.height/5);
 		// You can modify some width/height here
-		currentWidth = win.left / 2;
-		currentHeight = win.top / 2;
-
-		var left = Math.round((screen.width  / 2) - (width / 2) - currentWidth);
-		var top = Math.round((screen.height / 2) - (height / 2) - currentHeight);
+		// currentWidth = win.left / 2;
+		// currentHeight = win.top / 2;
+    var left = Math.round((screen.width/2)-(width/2));
+    var top = Math.round((screen.height/2)-(height/2)); 
+		// var left = Math.round((screen.width  / 2) - (width / 2) - currentWidth);
+		// var top = Math.round((screen.height / 2) - (height / 2) - currentHeight);
 
 		chrome.windows.create(
 			{
-				'url': chrome.extension.getURL("popup.html"),
+				// 'url': popupUrl,
+				'tabId': popupTabId,
 				'type': 'popup', // use popup instead of panel, so it's not included in browsing history and undo close tab function
 				'width': width,
 				'height': height,
@@ -576,7 +576,7 @@ function openPopupAsWindow() {
 				'top': top,
 				'focused': true
 			}, function (window) {
-				console.log("popup window created: "+window.tabs[0].id);
+				//console.log("popup window created: "+window.tabs[0].id);
 			}
 		);
 	});
@@ -603,6 +603,74 @@ function extractKeysFromCommands() {
 			}
 		});
 	});
+}
+
+function makeScreenshotOfAllTabs () {
+    if( typeof makeScreenshotOfAllTabs.counter == 'undefined' ) {
+        makeScreenshotOfAllTabs.counter = 4;
+    }
+    // console.log(makeScreenshotOfAllTabs.counter+" "+tabs.length+" "+tabs[makeScreenshotOfAllTabs.counter].id);
+    chrome.tabs.update(tabs[makeScreenshotOfAllTabs.counter].id, {active: true}, function(tab) {
+        chrome.windows.update(tab.windowId, {focused: true}, function(win) {
+            // console.log("updated");
+            makeScreenshotOfTab(tab.id, function(image) {
+                console.log("image");
+                if (makeScreenshotOfAllTabs.counter < tabs.length -1) {
+                    makeScreenshotOfAllTabs.counter++;
+                    makeScreenshotOfAllTabs();
+                }
+            });
+        });
+    });
+}
+
+makeScreenshotOfTab = function(tabId, callback) {
+   // await whenPageLoadComplete({ tabId })
+   // await whenTabActive({ tabId })
+    // Some delay appears required to not fail. Perhaps the browser needs
+    // to complete some rendering before the screen is captured?
+    // await delay(300)
+    chrome.tabs.captureVisibleTab(chrome.windows.WINDOW_ID_CURRENT, {
+        format: 'jpeg',
+    }, function(image) {
+        if (!chrome.runtime.lastError) {
+            console.log(image);
+            tabs[indexOfTab(tabId)].favIconUrl = image;
+            callback(image);
+        } else {
+            callback(null);
+        }
+    });
+}
+
+async function resizeImage(tabId, image, scale, maxHeight) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        img.src = image;
+        img.onload = () => {
+            const newHeight = Math.floor(img.height * scale);
+
+            if (newHeight <= maxHeight) {
+                resolve(canvas.toDataURL());
+            }
+
+            const newWidth = Math.floor(img.width / img.height * newHeight);
+
+            if (newHeight >= maxHeight) {
+                canvas.width = newWidth;
+                canvas.height = newHeight;
+
+                ctx.drawImage(img, 0, 0, newWidth, newHeight);
+
+                img.src = canvas.toDataURL();
+                img.height = newHeight;
+            }
+        };
+        img.onerror = reject;
+    });
 }
 
 function init() {
@@ -678,6 +746,7 @@ function init() {
   chrome.tabs.onActivated.addListener(function (info) {
 		// console.log('onActivated tab', info.tabId);
     updateTabOrder(info.tabId);
+     setTimeout(makeScreenshotOfTab.bind(null,info.tabId), 100);
   });
  
 	// var isChromeFocused = null;
@@ -692,33 +761,28 @@ function init() {
     }
   });
 	
-	var popupTriggerd = false; // popupMessagePort takes too much time to rely on as an indicator whether popup start was triggerd, the in between time
+	var popupTriggerd; // popupMessagePort takes too much time to rely on as an indicator whether popup start was triggerd, the in between time
   chrome.commands.onCommand.addListener(function(command) {
-		if (popupTriggerd) {
+		if (this.popupTriggerd) {
 			// if (command === "quick-search-tab") {
 				// popupMessagePort.postMessage("closeWindow"); // search shortcut closes popup
 			// }		
 		} else {
+			this.popupTriggerd = true; // see counterpart in popup.closeWindow
 			openPopup(command);
 		}
   });
 	
+	var initCommand, initFromTab;
 	function openPopup (command) {
-		console.log("openPopup() with command: "+command);
-		popupTriggerd = true;
+		// console.log("openPopup() with command: "+command);
 		openPopupAsWindow();
-		extractKeysFromCommands(); // fetch shorcuts anew before each startup in case they changed
 		chrome.windows.getCurrent({populate: true}, function(win) {
-			console.log("openPopup 2");
+			//console.log("openPopup 2");
 			var winActiveTab = win.tabs.find(tab => tab.active);  // Perhaps the id of the tab isn't needed. only if chrome was FOCUSED or not
-			chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-				if (request.popupReady === true) {
-					sendResponse({'initCommand': command, 'initFromTab': (win.focused ? winActiveTab : null)});
-					console.log("openPopup 3");
-					chrome.runtime.onMessage.removeListener(arguments.callee); // Not needed since it's a simple one time request 
-					// return true; // to call sendResponse async
-				}
-			});
+				this.initCommand = command;
+				this.initFromTab = (win.focused ? winActiveTab : null);
+				//console.log("openPopup 3");
 		});
 	}
 	
@@ -737,31 +801,51 @@ function init() {
 		}
 	};
 
-  chrome.runtime.onConnect.addListener(function(port) {
-    if (port.name === "qtPopup") {
-      console.log("popup opened!");
-      popupMessagePort = port;
-      if(tabOrderUpdateFunction) { // all the delay stuff isn't needed with dedicated GUI
-        tabOrderUpdateFunction.call();
-      }
-      popupMessagePort.onDisconnect.addListener(function(msg) {
-        console.log("popup closed!");
-        popupMessagePort = null;
-				popupTriggerd = false;
-				chrome.history.deleteUrl({url: popupUrl}); // remove it manually from browsing history 
-      });
-			popupMessagePort.onMessage.addListener(function(msg) {
-				console.log("PopupCL: "+msg); // show all popup console messages in background.js console
-			});
-    }
-  });
-
   chrome.bookmarks.onCreated.addListener(function() {setupBookmarks()});
   chrome.bookmarks.onRemoved.addListener(function() {setupBookmarks()});
   chrome.bookmarks.onChanged.addListener(function() {setupBookmarks()});
   chrome.bookmarks.onMoved.addListener(function() {setupBookmarks()});
 
   setupBookmarks();
+	
+    extractKeysFromCommands(); // fetch shorcuts anew before each startup in case they changed
+    setTimeout(openPopupInTab, 50);
+
+    setTimeout(makeScreenshotOfAllTabs, 2000);
+}
+
+chrome.runtime.onConnect.addListener(function(port) {
+    if (port.name === "qtPopup") {
+        // console.log("popup opened!");
+        popupMessagePort = port;
+        if(tabOrderUpdateFunction) { // all the delay stuff isn't needed with dedicated GUI
+            tabOrderUpdateFunction.call();
+        }
+        popupMessagePort.onDisconnect.addListener(function(msg) {
+            // console.log("popup closed!");
+            popupMessagePort = null;
+            popupTriggerd = false;
+            openPopupInTab();
+            // chrome.history.deleteUrl({url: popupUrl}); // remove it manually from browsing history
+        });
+        popupMessagePort.onMessage.addListener(function(msg) {
+            console.log("PopupCL: "+msg); // show all popup console messages in background.js console
+        });
+    }
+});
+
+var popupTabId;
+function openPopupInTab() {
+    chrome.tabs.create({
+            url: popupUrl,
+            active: false,
+            pinned: true,
+            index: 1,
+            windowId: tabs[tabs.length -1].windowId
+    }, function(tab) {
+        popupTabId = tab.id;
+        chrome.history.deleteUrl({ url: popupUrl });
+    });
 }
 
 init(); // doesn't work like this if background.js persistent = false.

@@ -36,11 +36,6 @@ var bg = chrome.extension.getBackgroundPage();
 var bgMessagePort = chrome.runtime.connect({name: "qtPopup"});
 
 /**
- * log name constant
- */
-var LOG_SRC = "POPUP";
-
-/**
  * empty variable used to cache the browser history once it has been loaded
  */
 var historyCache = null;
@@ -67,55 +62,11 @@ var modifierDown = false; // or modifierState ?
 var initCommand = null; // Command that triggered the popup to open
 var initFromTab = null; // Null when chrome wasn't focused, otherwise contains tab from where the popup was triggerd
 
-/**
- * Simple little timer class to help with optimizations
- */
-function Timer() {
-  this.start = this.last = (new Date).getTime();
-}
-Timer.prototype.log = function() {
-  var args = Array.prototype.slice.call(arguments);
-  var now = (new Date).getTime();
-  args.push("total time " + (now - this.start) + " m/s, delta " + (now - this.last) + " m/s");
-  log.apply(this, args);
-  this.last = now;
-};
-Timer.prototype.reset = function() {
-  this.start = this.last = (new Date).getTime();
-};
-
-/**
- * timer to record page initialization events
- */
-// var pageTimer = new Timer();
-
-/**
- * Log call that prepends the LOG_SRC before delegating to the background page to simplify debugging
- */
-function log() {
-  if (bg.debug) {
-    var args = Array.prototype.slice.call(arguments);
-    args.unshift(LOG_SRC);
-    bg.log.apply(bg, args);
-  }
-}
 
 function openInNewTab(url) {
-  log("opening new tab", url);
+  // log("opening new tab", url);
   chrome.tabs.create({url: url, index: 1000});
-  return closeWindow();
-}
-
-function closeWindow() {
-  /**
-   * unbind document events before closing the popup window, see issue
-   * Chrome shortcuts do not work immediately after using quicktabs #95
-   */
-  log("Unbinding document event handlers.");
-	//$(document).unbind(); // do both unbind and off, just to be sure. > seemingly both not needed
-	//$(document).off();
-  window.close();
-  return false;
+  return window.close();
 }
 
 function closeTabs(tabIds) {
@@ -181,6 +132,7 @@ function focusPrev(skip) {
     (skip === 1 ? focusLast : focusFirst)();
   }
 
+  $('#searchbox').blur();
   scrollToFocus();
 }
 
@@ -191,6 +143,7 @@ function focusNext(skip) {
     (skip === 1 ? focusFirst : focusLast)();
   }
 
+  $('#searchbox').blur();
   scrollToFocus();
 }
 
@@ -244,30 +197,36 @@ function compareTabArrays(recordedTabsList, queryTabList) {
  * =============================================================================================================================================================
  */
 window.addEventListener("DOMContentLoaded", function(){
-	chrome.runtime.sendMessage({popupReady: true}, function(response) {
-		initCommand = response.initCommand;
-		initFromTab = response.initFromTab;
-		bgMessagePort.postMessage("1");
-		chrome.runtime.sendMessage("initCommand: "+initCommand+" || initFromTab: "+initFromTab);
-			
-		init();
-  });
-}, false);
+    init();
+});
+
+window.addEventListener('beforeunload', function(event) {
+    //event.returnValue = `Are you sure you want to leave?`;
+    /**
+     * unbind document events before closing the popup window, see issue
+     * Chrome shortcuts do not work immediately after using quicktabs #95
+     */
+    $(document).unbind(); // do both unbind and off, just to be sure. > seemingly both not needed
+    $(document).off();
+    return true;
+});
 
 window.addEventListener('blur', function() {
 	// bgMessagePort.postMessage("popup.event: blur"); 
 	if(!bg.showDevTools()) { // to be able to inspect popup set the already existing flag to keep it open onblur
-		closeWindow(); // ensure popup closes when switching to other window (including non-chrome) so hotkeys keep working
+		window.close(); // ensure popup closes when switching to other window (including non-chrome) so hotkeys keep working
 	}
 });
 
-/**
- * listen to the background page for key presses and trigger the appropriate responses
- */
-bgMessagePort.onMessage.addListener(function(msg) {
-  //log("popup message!", msg);
-	if (msg === "closeWindow") {
-		closeWindow();
+window.addEventListener('focus', function() {
+	// alert("Focus!");
+	update();
+});
+
+chrome.runtime.onMessage.addListener(function(message,sender,sendResponse){
+	if (message == "ping") {
+		chrome.runtime.sendMessage({message: 'pong'},function(response){
+		});
 	}
 });
 
@@ -297,7 +256,7 @@ window.addEventListener('keyup', function (event) {
 				
 				if ($('#searchbox').is(":focus")) {
 						// close QT
-						closeWindow();
+						window.close();
 				} else {
 						// focus searchbox
 						entryWithFocus().removeClass('withfocus');
@@ -310,15 +269,39 @@ window.addEventListener('keyup', function (event) {
 	}
 });
 
-var init = function() {
-		bgMessagePort.postMessage("popup.init()"); 
-			
-			// pageTimer.log("Document ready completed");	
+function update() {	
+	this.initCommand = bg.initCommand;
+	this.initFromTab = bg.initFromTab;
 
+	/**
+	* Try to fetch the last search string.
+	* If present, use it to render only matched tabs list
+	* else, render all current tabs list
+	*/
+	var lastSearch = bg.lastSearchedStr();
+	// Apply search only if there is sth. to search for
+	if (initCommand === "quick-search-tab" && bg.restoreLastSearchedStr() && typeof lastSearch !== "undefined" && lastSearch.length > 0) {
+			$("#searchbox").val(lastSearch).select();
+			var result = search.executeSearch(lastSearch);
+			renderTabs(result, 1);
+	} else {
+			drawCurrentTabs();
+			$("#searchbox").val("");
+	} 
 	
-  // pageTimer.log("Document ready");
+	// when drawing is finished
+	// bgMessagePort.postMessage("drawing is finished");
+	// if openend via search shortcuts don't focus first, but stay in search.
+	if(initCommand === "quick-search-tab") {
+		$('#searchbox').focus();
+	} else {
+			$('#searchbox').blur();
+			focusFirst();
+	}
+}
 
-  switch(bg.searchType()) {
+var init = function() {
+	 switch(bg.searchType()) {
 	case 'fuseT1':
 	case 'fuseT2':
       search = new FuseSearch();
@@ -336,31 +319,7 @@ var init = function() {
       break;
   }
 	
-	/**
-	* Try to fetch the last search string.
-	* If present, use it to render only matched tabs list
-	* else, render all current tabs list
-	*/
-	var lastSearch = bg.lastSearchedStr();
-	// Apply search only if there is sth. to search for
-	if (initCommand === "quick-search-tab" && bg.restoreLastSearchedStr() && typeof lastSearch !== "undefined" && lastSearch.length > 0) {
-			$("#searchbox").val(lastSearch).select();
-			var result = search.executeSearch(lastSearch);
-			renderTabs(result, 1);
-	} else {
-			drawCurrentTabs();
-	} 
-	
-	// when drawing is finished
-	bgMessagePort.postMessage("drawing is finished");
-	// if openend via search shortcuts don't focus first, but stay in search.
-	if(initCommand === "quick-search-tab") {
-		$('#searchbox').focus();
-	} else {
-			$('#searchbox').blur();
-			focusFirst();
-	}
-
+	update();
 	
   $('<style/>').text(bg.getCustomCss()).appendTo('head');
 
@@ -398,7 +357,7 @@ var init = function() {
     var inputText = $("#searchbox");
     var url = bg.getSearchString().replace(/%s/g, encodeURI(inputText.val()));
     chrome.tabs.create({url: url});
-    closeWindow();
+    window.close();
     return false;
   });
 
@@ -420,7 +379,7 @@ var init = function() {
         //url = "http://www.google.com/search?q=" + encodeURI($("input[type=text]").val());
         url = bg.getSearchString().replace(/%s/g, encodeURI(inputText.val()));
         chrome.tabs.create({url: url});
-        closeWindow();
+        window.close();
       }
     }
 
@@ -455,7 +414,7 @@ var init = function() {
   });
 
   $(document).on('keydown.esc', function() {
-    return closeWindow();
+    return window.close();
   });
 
   $('#searchbox').on({
@@ -507,7 +466,7 @@ function drawCurrentTabs() {
 	// bgMessagePort.postMessage("‒--------- "+initFromTab.id+" ---- "+bg.tabs[1].id);
 	// var drawTabs = bg.tabs.slice(1); // remove popup tab itself
 	// if popup was triggerd within a normal chrome tab and it is already in the tabs timeline then don't draw it either
-	 bgMessagePort.postMessage("drawCurrentTab");
+	 // bgMessagePort.postMessage("drawCurrentTab");
 	renderTabs({
 		// use .slice(0,20) to limit tabs size to render
 		allTabs: initFromTab == null ? bg.tabs : bg.tabs.slice(1), // remove the Popup itself and in case a normal chrome tab was focused this one too
@@ -524,14 +483,12 @@ function drawCurrentTabs() {
  * @param currentTab (optional) - what is the current tab, if defined it will be excluded from the render list
  */
 function renderTabs(params, delay) {
-	bgMessagePort.postMessage("renderTabs");
+	// bgMessagePort.postMessage("renderTabs");
   if (params === null) {
     return;
   }
 
-  //pageTimer.log("start rendering tab template");
-
-  var allTabs = (params.allTabs || []).map(function(obj) {
+  var allTabs = (params.allTabs || []).map(function(obj) { //params.allTabs.slice(1, 10)
 		obj.templateTabImage = tabImage(obj);
 		obj.templateTitle = encodeHTMLSource(obj.title);
 		obj.templateTooltip = stripTitle(obj.title);
@@ -548,21 +505,21 @@ function renderTabs(params, delay) {
     return obj;
   });
 
-  // var bookmarks = (params.bookmarks || []).map(function(obj) {
-    // obj.templateTitle = encodeHTMLSource(obj.title);
-    // obj.templateTooltip = stripTitle(obj.title);
-    // obj.templateUrlPath = encodeHTMLSource(obj.url);
-    // obj.templateUrl = encodeHTMLSource(obj.displayUrl);
-    // return obj;
-  // });
+  var bookmarks = (params.bookmarks || []).map(function(obj) {
+    obj.templateTitle = encodeHTMLSource(obj.title);
+    obj.templateTooltip = stripTitle(obj.title);
+    obj.templateUrlPath = encodeHTMLSource(obj.url);
+    obj.templateUrl = encodeHTMLSource(obj.displayUrl);
+    return obj;
+  });
 	var bookmarks = "", history = "";
-  // var history = (params.history || []).map(function(obj) {
-    // obj.templateTitle = encodeHTMLSource(obj.title);
-    // obj.templateTooltip = stripTitle(obj.title);
-    // obj.templateUrlPath = encodeHTMLSource(obj.url);
-    // obj.templateUrl = encodeHTMLSource(obj.displayUrl);
-    // return obj;
-  // });
+  var history = (params.history || []).map(function(obj) {
+    obj.templateTitle = encodeHTMLSource(obj.title);
+    obj.templateTooltip = stripTitle(obj.title);
+    obj.templateUrlPath = encodeHTMLSource(obj.url);
+    obj.templateUrl = encodeHTMLSource(obj.displayUrl);
+    return obj;
+  });
 
   var context = {
     'type': params.type || "all",
@@ -584,12 +541,12 @@ function renderTabs(params, delay) {
   /**
    * render the templates, the timeout is required to work around issues with Chromes extension rendering on the Mac, refs #91, #168
    */
-    document.getElementById("content-list").innerHTML = Mustache.to_html(
+    document.getElementById("content-list").innerHTML = Mustache.render(
         document.getElementById('template').text, context
     );
 
     $('.open').on('click', function() {
-			closeWindow();
+			window.close();
       bg.switchTabsWithoutDelay(parseInt(this.id));
     });
 
@@ -648,6 +605,7 @@ function endsWith(str, end) {
  *
  */
 function encodeHTMLSource(str) {
+	// @TODO: this costs insane CPU and isn't necessary
   var encodeHTMLRules = {"&": "&#38;", "<": "&#60;", ">": "&#62;", '"': '&#34;', "'": '&#39;', "/": '&#47;', "\v": '<b>', "\b": '</b>'},
       matchHTML = /&(?!#?\w+;)|<|>|"|'|\/|[\v]|[\b]/g;
   return str ? str.replace(matchHTML, function(m) {
@@ -661,8 +619,9 @@ function encodeHTMLSource(str) {
  *
  */
 function stripTitle(str) {
-    str = $('<div/>').html(str).text();
-    str = str.replace(/(?:[\v]|[\b])/g, '');
+		// @TODO: this costs insane CPU and isn't necessary
+    //str = $('<div/>').html(str).text(); 
+    // str = str.replace(/(?:[\v]|[\b])/g, '');
     return str;
 }
 
@@ -745,8 +704,6 @@ AbstractSearch.prototype.executeSearch = function(query) {
       filteredBookmarks = this.searchTabArray(query, bg.bookmarks);
     }
   }
-
-  // pageTimer.log("search completed for '" + query + "'");
 
   // only show the top MAX_NON_TAB_RESULTS bookmark hits.
   return {
