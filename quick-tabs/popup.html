@@ -52,13 +52,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
   {{#tabs}}
     <div class="item tab open {{urlStyle}}" id="{{id}}">
+      <div class="{{tabImageStyle}}">
+        <img src="{{templateTabImage}}" width="16" height="16" border="0">
+      </div>
       <div>
         <div class="close" id="c{{id}}" title="{{closeTitle}}"></div>
         <div class="title"{{#tips}} title="{{{templateTooltip}}}"{{/tips}}>{{{templateTitle}}}</div>
         {{#urls}}<div class="url">{{{templateUrl}}}</div>{{/urls}}
-      </div>
-      <div class="{{tabImageStyle}}">
-        <img src="{{templateTabImage}}" width="16" height="16" border="0">
       </div>
     </div>
   {{/tabs}}

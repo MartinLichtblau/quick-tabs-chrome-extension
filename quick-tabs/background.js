@@ -268,6 +268,11 @@ function showFavicons() {
   return s ? s === 'true' : true;
 }
 
+function showAsList() {
+    var s = localStorage["show_as_list"];
+    return s ? s === 'true' : true;
+}
+
 function moveOnSwitch() {
   var s = localStorage["move_on_switch"];
   return s ? s === 'true' : false;
@@ -279,6 +284,10 @@ function setMoveOnSwitch(val) {
 
 function setShowFavicons(val) {
   localStorage["show_favicons"] = val;
+}
+
+function setShowAsList(val) {
+    localStorage["show_as_list"] = val;
 }
 
 function getSearchString() {
@@ -553,17 +562,18 @@ function setupBookmarks() {
 
 function openPopupAsWindow() {
 	chrome.windows.getCurrent(function(win) {
-		// var currentWidth = 0;
-		// var currentHeight = 0;
-		var width = screen.width;
-		var height = screen.height - (screen.height/5);
-		// You can modify some width/height here
-		// currentWidth = win.left / 2;
-		// currentHeight = win.top / 2;
-    var left = Math.round((screen.width/2)-(width/2));
-    var top = Math.round((screen.height/2)-(height/2)); 
-		// var left = Math.round((screen.width  / 2) - (width / 2) - currentWidth);
-		// var top = Math.round((screen.height / 2) - (height / 2) - currentHeight);
+        let width, height, left, top;
+        if(showAsList()) {
+            width = 370;
+            height = 900;
+            left = Math.round((screen.width  / 2) - (width / 2));
+            top = Math.round((screen.height / 2) - (height / 2));
+        } else {
+            width = screen.width;
+            height = screen.height - (screen.height/5);
+            left = Math.round((screen.width/2)-(width/2));
+            top = Math.round((screen.height/2)-(height/2));
+        }
 
 		chrome.windows.create(
 			{
@@ -746,7 +756,8 @@ function init() {
   chrome.tabs.onActivated.addListener(function (info) {
 		// console.log('onActivated tab', info.tabId);
     updateTabOrder(info.tabId);
-     setTimeout(makeScreenshotOfTab.bind(null,info.tabId), 100);
+    if(!showAsList())
+        setTimeout(makeScreenshotOfTab.bind(null,info.tabId), 100);
   });
  
 	// var isChromeFocused = null;
@@ -811,7 +822,8 @@ function init() {
     extractKeysFromCommands(); // fetch shorcuts anew before each startup in case they changed
     setTimeout(openPopupInTab, 50);
 
-    setTimeout(makeScreenshotOfAllTabs, 2000);
+    if(!showAsList())
+        setTimeout(makeScreenshotOfAllTabs, 2000);
 }
 
 chrome.runtime.onConnect.addListener(function(port) {
