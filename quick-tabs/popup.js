@@ -269,9 +269,16 @@ window.addEventListener('keyup', function (event) {
 	}
 });
 
-function update() {	
+function update() {
 	this.initCommand = bg.initCommand;
 	this.initFromTab = bg.initFromTab;
+
+	if(!bg.popupTriggerd) {  // put popup script in consistent state when opening it as background tab in some window
+        drawCurrentTabs();
+        $("#searchbox").val("");
+        $('#searchbox').blur();
+        focusFirst();
+    }
 
 	/**
 	* Try to fetch the last search string.
@@ -467,6 +474,8 @@ function drawCurrentTabs() {
 	// var drawTabs = bg.tabs.slice(1); // remove popup tab itself
 	// if popup was triggerd within a normal chrome tab and it is already in the tabs timeline then don't draw it either
 	 // bgMessagePort.postMessage("drawCurrentTab");
+    // console.log('Var:bg.tabs.slice(bg.tabs.indexOf(initFromTab.id), 1) ==', bg.tabs.slice(bg.tabs.indexOf(initFromTab.id), 1));
+    // console.log('Var:initFromTab.id ==', initFromTab.id);
 	renderTabs({
 		// use .slice(0,20) to limit tabs size to render
 		allTabs: initFromTab == null ? bg.tabs : bg.tabs.slice(1), // remove the Popup itself and in case a normal chrome tab was focused this one too

@@ -324,9 +324,9 @@ function clearOldShortcutKey() {
 var popupUrl = chrome.runtime.getURL("popup.html");
 
 function includeTab(tab) {
-	var include = true;
-  include = !(!showDevTools() && /chrome-devtools:\/\//.exec(tab.url));
-	include = !(tab.url === popupUrl); //'chrome-extension://dbgcbefmdhnkndodnldmhjfnhnpkiddp/popup.html'); // instead use sth. like chrome.runtime.getURL("html/popup.html");
+    var include = true;
+    include = !(!showDevTools() && /chrome-devtools:\/\//.exec(tab.url));
+    include = tab.pendingUrl ? !(tab.pendingUrl.includes(chrome.runtime.id)) : !(tab.url.includes(chrome.runtime.id))
 	return include
 }
 
@@ -837,6 +837,8 @@ chrome.runtime.onConnect.addListener(function(port) {
             // console.log("popup closed!");
             popupMessagePort = null;
             popupTriggerd = false;
+            initCommand = null;
+            initFromTab =  null;
             openPopupInTab();
             // chrome.history.deleteUrl({url: popupUrl}); // remove it manually from browsing history
         });
@@ -848,16 +850,25 @@ chrome.runtime.onConnect.addListener(function(port) {
 
 var popupTabId;
 function openPopupInTab() {
-    chrome.tabs.create({
-            url: popupUrl,
-            active: false,
-            pinned: true,
-            index: 1,
-            windowId: tabs[tabs.length -1].windowId
+  chrome.tabs.query({url: popupUrl}, function (popup_tabs) {
+    if (popup_tabs && popup_tabs.length > 0) {
+      // remove existing popup tabs (which shouldn't exist) but sometimes they become zombies
+      popup_tabs.forEach(tab => {
+        chrome.tabs.remove(tab.id);
+      });
+    }
+
+    chrome.tabs.create({  // keeps state when opened via url in window
+      url: popupUrl,
+      active: false,
+      pinned: true,
+      index: 1,
+      windowId: tabs[tabs.length -1].windowId
     }, function(tab) {
-        popupTabId = tab.id;
-        chrome.history.deleteUrl({ url: popupUrl });
+      popupTabId = tab.id;
+      chrome.history.deleteUrl({ url: popupUrl });
     });
+  });
 }
 
 init(); // doesn't work like this if background.js persistent = false.
