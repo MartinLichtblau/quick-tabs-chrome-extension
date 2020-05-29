@@ -389,7 +389,7 @@ function addClosedTab(tab) {
  */
 function indexOfTab(tabId) {
   for(var i = 0; i < tabs.length; i++) {
-    if(tabId === tabs[i].id) {
+    if(tabs[i] && tabId === tabs[i].id) {
       return i;
     }
   }
@@ -524,7 +524,7 @@ function switchTabs(tabid) {
 		if (moveOnSwitch()) {
         chrome.tabs.move(tab.id, { index: -1 });	
 		}
-		chrome.windows.update(tab.windowId, {focused:true});
+		chrome.windows.update(tab.windowId, {focused:true}); // Probably unnecessary  
 	});
 }
 
@@ -594,6 +594,7 @@ function openPopupAsWindow() {
 
 var prevTabShortcut = null;
 var newerTabShorcut = null;
+
 var searchTabShorcut = null;
 function extractKeysFromCommands() {
 	chrome.commands.getAll(function(commands) {

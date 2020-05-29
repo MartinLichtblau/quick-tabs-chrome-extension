@@ -85,6 +85,8 @@ function closeTabs(tabIds) {
 */
 function scrollToFocus() {
   var element = $(".withfocus");
+  // if (!element)
+  //     return false;
 
   var offset = element.offset().top;
   var elementHeight = element.outerHeight(true) * 2;
